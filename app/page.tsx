@@ -49,6 +49,7 @@ export default function Home() {
           snapToCenter={editorHooks.snapToCenter}
           setSnapToCenter={editorHooks.setSnapToCenter}
           uploadedFonts={editorHooks.uploadedFonts}
+          backgroundImage={editorHooks.backgroundImage}
         />
       </div>
       

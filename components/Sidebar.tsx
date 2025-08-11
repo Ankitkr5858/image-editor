@@ -44,12 +44,30 @@ interface TextLayer {
   locked: boolean;
   lineHeight: number;
   letterSpacing: number;
+  curved?: boolean;
+  curveRadius?: number;
   textShadow: {
     enabled: boolean;
     color: string;
     blur: number;
     offsetX: number;
     offsetY: number;
+  };
+  stroke?: {
+    enabled: boolean;
+    color: string;
+    width: number;
+  };
+  gradient?: {
+    enabled: boolean;
+    type: 'linear' | 'radial';
+    colors: string[];
+    angle: number;
+  };
+  animation?: {
+    enabled: boolean;
+    type: 'fade' | 'slide' | 'bounce' | 'pulse';
+    duration: number;
   };
 }
 
@@ -70,6 +88,7 @@ interface SidebarProps {
   snapToCenter: boolean;
   setSnapToCenter: (enabled: boolean) => void;
   uploadedFonts: string[];
+  backgroundImage?: HTMLImageElement | null;
 }
 
 const GOOGLE_FONTS = [
@@ -105,7 +124,8 @@ export function Sidebar({
   snapLayerToCenter,
   snapToCenter,
   setSnapToCenter,
-  uploadedFonts
+  uploadedFonts,
+  backgroundImage
 }: SidebarProps) {
   const fontSizeInputRef = useRef<HTMLInputElement>(null);
   const [textProperties, setTextProperties] = useState({
@@ -127,7 +147,23 @@ export function Sidebar({
       offsetY: 2
     },
     curved: false,
-    curveRadius: 100
+    curveRadius: 100,
+    stroke: {
+      enabled: false,
+      color: '#000000',
+      width: 2
+    },
+    gradient: {
+      enabled: false,
+      type: 'linear' as 'linear' | 'radial',
+      colors: ['#000000', '#ffffff'],
+      angle: 0
+    },
+    animation: {
+      enabled: false,
+      type: 'fade' as 'fade' | 'slide' | 'bounce' | 'pulse',
+      duration: 1000
+    }
   });
 
   useEffect(() => {
@@ -145,7 +181,23 @@ export function Sidebar({
         letterSpacing: selectedLayer.letterSpacing,
         textShadow: selectedLayer.textShadow,
         curved: selectedLayer.curved || false,
-        curveRadius: selectedLayer.curveRadius || 100
+        curveRadius: selectedLayer.curveRadius || 100,
+        stroke: selectedLayer.stroke || {
+          enabled: false,
+          color: '#000000',
+          width: 2
+        },
+        gradient: selectedLayer.gradient || {
+          enabled: false,
+          type: 'linear',
+          colors: ['#000000', '#ffffff'],
+          angle: 0
+        },
+        animation: selectedLayer.animation || {
+          enabled: false,
+          type: 'fade',
+          duration: 1000
+        }
       });
     }
   }, [selectedLayer]);
@@ -505,6 +557,129 @@ export function Sidebar({
                   )}
                 </div>
 
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-medium">Text Stroke</Label>
+                    <Switch
+                      checked={textProperties.stroke.enabled}
+                      onCheckedChange={(enabled) => updateProperty('stroke', { ...textProperties.stroke, enabled })}
+                    />
+                  </div>
+                  
+                  {textProperties.stroke.enabled && (
+                    <div className="space-y-3 pl-4 border-l-2 border-gray-200">
+                      <div>
+                        <Label className="text-xs font-medium">Stroke Color</Label>
+                        <div className="flex items-center space-x-2 mt-1">
+                          <Input
+                            type="color"
+                            value={textProperties.stroke.color}
+                            onChange={(e) => updateProperty('stroke', { ...textProperties.stroke, color: e.target.value })}
+                            className="w-12 h-8 p-1 border rounded"
+                          />
+                          <Input
+                            value={textProperties.stroke.color}
+                            onChange={(e) => updateProperty('stroke', { ...textProperties.stroke, color: e.target.value })}
+                            placeholder="#000000"
+                            className="flex-1"
+                          />
+                        </div>
+                      </div>
+                      
+                      <div>
+                        <Label className="text-xs font-medium">Stroke Width</Label>
+                        <div className="flex items-center space-x-2 mt-1">
+                          <Slider
+                            value={[textProperties.stroke.width]}
+                            onValueChange={([value]) => updateProperty('stroke', { ...textProperties.stroke, width: value })}
+                            min={0.5}
+                            max={10}
+                            step={0.5}
+                            className="flex-1"
+                          />
+                          <span className="text-xs text-gray-500 w-8">{textProperties.stroke.width}px</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-medium">Text Gradient</Label>
+                    <Switch
+                      checked={textProperties.gradient.enabled}
+                      onCheckedChange={(enabled) => updateProperty('gradient', { ...textProperties.gradient, enabled })}
+                    />
+                  </div>
+                  
+                  {textProperties.gradient.enabled && (
+                    <div className="space-y-3 pl-4 border-l-2 border-gray-200">
+                      <div>
+                        <Label className="text-xs font-medium">Gradient Type</Label>
+                        <Select 
+                          value={textProperties.gradient.type} 
+                          onValueChange={(value: 'linear' | 'radial') => updateProperty('gradient', { ...textProperties.gradient, type: value })}
+                        >
+                          <SelectTrigger className="mt-1">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="linear">Linear</SelectItem>
+                            <SelectItem value="radial">Radial</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <Label className="text-xs font-medium">Start Color</Label>
+                          <Input
+                            type="color"
+                            value={textProperties.gradient.colors[0]}
+                            onChange={(e) => {
+                              const newColors = [...textProperties.gradient.colors];
+                              newColors[0] = e.target.value;
+                              updateProperty('gradient', { ...textProperties.gradient, colors: newColors });
+                            }}
+                            className="w-full h-8 p-1 border rounded mt-1"
+                          />
+                        </div>
+                        
+                        <div>
+                          <Label className="text-xs font-medium">End Color</Label>
+                          <Input
+                            type="color"
+                            value={textProperties.gradient.colors[1]}
+                            onChange={(e) => {
+                              const newColors = [...textProperties.gradient.colors];
+                              newColors[1] = e.target.value;
+                              updateProperty('gradient', { ...textProperties.gradient, colors: newColors });
+                            }}
+                            className="w-full h-8 p-1 border rounded mt-1"
+                          />
+                        </div>
+                      </div>
+                      
+                      {textProperties.gradient.type === 'linear' && (
+                        <div>
+                          <Label className="text-xs font-medium">Angle</Label>
+                          <div className="flex items-center space-x-2 mt-1">
+                            <Slider
+                              value={[textProperties.gradient.angle]}
+                              onValueChange={([value]) => updateProperty('gradient', { ...textProperties.gradient, angle: value })}
+                              max={360}
+                              step={15}
+                              className="flex-1"
+                            />
+                            <span className="text-xs text-gray-500 w-12">{textProperties.gradient.angle}°</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 <div className="grid grid-cols-2 gap-2">
                   <Button
                     variant="outline"
@@ -524,6 +699,23 @@ export function Sidebar({
                     <Move className="w-3 h-3" />
                     <span className="text-xs">Center V</span>
                   </Button>
+                </div>
+                
+                <div className="pt-4 border-t border-gray-200">
+                  <div className="text-xs text-gray-500 space-y-1">
+                    <div className="flex items-center space-x-1">
+                      <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                      <span>Professional text effects enabled</span>
+                    </div>
+                    <div className="flex items-center space-x-1">
+                      <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+                      <span>Advanced typography controls</span>
+                    </div>
+                    <div className="flex items-center space-x-1">
+                      <span className="w-2 h-2 bg-purple-500 rounded-full"></span>
+                      <span>Multi-layer composition tools</span>
+                    </div>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -638,7 +830,7 @@ export function Sidebar({
                 </div>
                 
                 <p className="text-xs text-gray-500">
-                  Multi-select active: Use group transforms, alignment, and distribution tools. Smart spacing hints show distances.
+                  🎨 <strong>Group Mode Active:</strong> Use batch transforms, smart alignment, and distribution tools. Spacing hints show precise distances between layers.
                 </p>
               </CardContent>
             </Card>

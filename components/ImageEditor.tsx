@@ -24,12 +24,25 @@ interface TextLayer {
   locked: boolean;
   lineHeight: number;
   letterSpacing: number;
+  curved?: boolean;
+  curveRadius?: number;
   textShadow: {
     enabled: boolean;
     color: string;
     blur: number;
     offsetX: number;
     offsetY: number;
+  };
+  stroke?: {
+    enabled: boolean;
+    color: string;
+    width: number;
+  };
+  gradient?: {
+    enabled: boolean;
+    type: 'linear' | 'radial';
+    colors: string[];
+    angle: number;
   };
 }
 
@@ -200,24 +213,48 @@ export function ImageEditor({
         ctx.shadowOffsetY = layer.textShadow.offsetY;
       }
       
-      ctx.font = `${layer.fontWeight} ${layer.fontSize}px ${layer.fontFamily}`;
-      ctx.fillStyle = layer.color;
-      ctx.textAlign = layer.textAlign;
-      
-      // Apply letter spacing
-      if (layer.letterSpacing !== 0) {
-        ctx.letterSpacing = `${layer.letterSpacing}px`;
+      // Apply gradient if enabled
+      if (layer.gradient && layer.gradient.enabled) {
+        const gradient = layer.gradient.type === 'linear' 
+          ? (() => {
+              const angle = (layer.gradient.angle * Math.PI) / 180;
+              const distance = layer.fontSize * 2;
+              const x1 = layer.x - Math.cos(angle) * distance;
+              const y1 = layer.y - Math.sin(angle) * distance;
+              const x2 = layer.x + Math.cos(angle) * distance;
+              const y2 = layer.y + Math.sin(angle) * distance;
+              return ctx.createLinearGradient(x1, y1, x2, y2);
+            })()
+          : ctx.createRadialGradient(layer.x, layer.y, 0, layer.x, layer.y, layer.fontSize);
+        
+        layer.gradient.colors.forEach((color, index) => {
+          gradient.addColorStop(index / (layer.gradient!.colors.length - 1), color);
+        });
+        
+        ctx.fillStyle = gradient;
+      } else {
+        ctx.fillStyle = layer.color;
       }
+      
+      ctx.font = `${layer.fontWeight} ${layer.fontSize}px ${layer.fontFamily}`;
+      ctx.textAlign = layer.textAlign;
       
       // Handle curved text
       if (layer.curved) {
         drawCurvedText(ctx, layer);
       } else {
-        drawStraightText(ctx, layer);
+        drawStraightTextWithSpacing(ctx, layer);
+      }
+      
+      // Apply stroke if enabled
+      if (layer.stroke && layer.stroke.enabled) {
+        ctx.strokeStyle = layer.stroke.color;
+        ctx.lineWidth = layer.stroke.width;
+        drawStrokeTextWithSpacing(ctx, layer);
       }
 
-      // Draw selection outline and handles
-      if ((layer.selected || selectedLayers.includes(layer)) && !layer.locked) {
+      // Draw selection handles if selected
+      if (layer.selected) {
         drawSelectionHandles(ctx, layer);
       }
 
@@ -269,7 +306,7 @@ export function ImageEditor({
     }
   };
 
-  const drawStraightText = (ctx: CanvasRenderingContext2D, layer: TextLayer) => {
+  const drawStraightTextWithSpacing = (ctx: CanvasRenderingContext2D, layer: TextLayer) => {
     // Apply rotation
     if (layer.rotation !== 0) {
       ctx.translate(layer.x, layer.y);
@@ -281,7 +318,103 @@ export function ImageEditor({
     const lineHeight = layer.fontSize * layer.lineHeight;
     
     lines.forEach((line, index) => {
-      ctx.fillText(line, layer.x, layer.y + (index * lineHeight));
+      const yPos = layer.y + (index * lineHeight);
+      
+      // Handle letter spacing manually
+      if (layer.letterSpacing !== 0) {
+        drawTextWithLetterSpacing(ctx, line, layer.x, yPos, layer.letterSpacing, layer.textAlign);
+      } else {
+        ctx.fillText(line, layer.x, yPos);
+      }
+    });
+  };
+
+  const drawStrokeTextWithSpacing = (ctx: CanvasRenderingContext2D, layer: TextLayer) => {
+    const lines = layer.text.split('\n');
+    const lineHeight = layer.fontSize * layer.lineHeight;
+    
+    lines.forEach((line, index) => {
+      const yPos = layer.y + (index * lineHeight);
+      
+      if (layer.letterSpacing !== 0) {
+        drawStrokeWithLetterSpacing(ctx, line, layer.x, yPos, layer.letterSpacing, layer.textAlign);
+      } else {
+        ctx.strokeText(line, layer.x, yPos);
+      }
+    });
+  };
+
+  const drawTextWithLetterSpacing = (
+    ctx: CanvasRenderingContext2D, 
+    text: string, 
+    x: number, 
+    y: number, 
+    letterSpacing: number,
+    textAlign: 'left' | 'center' | 'right'
+  ) => {
+    if (letterSpacing === 0) {
+      ctx.fillText(text, x, y);
+      return;
+    }
+
+    const chars = text.split('');
+    let currentX = x;
+    
+    // Calculate total width for alignment
+    if (textAlign === 'center' || textAlign === 'right') {
+      const totalWidth = chars.reduce((width, char, index) => {
+        const charWidth = ctx.measureText(char).width;
+        return width + charWidth + (index < chars.length - 1 ? letterSpacing : 0);
+      }, 0);
+      
+      if (textAlign === 'center') {
+        currentX = x - totalWidth / 2;
+      } else if (textAlign === 'right') {
+        currentX = x - totalWidth;
+      }
+    }
+    
+    chars.forEach((char, index) => {
+      ctx.fillText(char, currentX, y);
+      const charWidth = ctx.measureText(char).width;
+      currentX += charWidth + letterSpacing;
+    });
+  };
+
+  const drawStrokeWithLetterSpacing = (
+    ctx: CanvasRenderingContext2D, 
+    text: string, 
+    x: number, 
+    y: number, 
+    letterSpacing: number,
+    textAlign: 'left' | 'center' | 'right'
+  ) => {
+    if (letterSpacing === 0) {
+      ctx.strokeText(text, x, y);
+      return;
+    }
+
+    const chars = text.split('');
+    let currentX = x;
+    
+    // Calculate total width for alignment
+    if (textAlign === 'center' || textAlign === 'right') {
+      const totalWidth = chars.reduce((width, char, index) => {
+        const charWidth = ctx.measureText(char).width;
+        return width + charWidth + (index < chars.length - 1 ? letterSpacing : 0);
+      }, 0);
+      
+      if (textAlign === 'center') {
+        currentX = x - totalWidth / 2;
+      } else if (textAlign === 'right') {
+        currentX = x - totalWidth;
+      }
+    }
+    
+    chars.forEach((char, index) => {
+      ctx.strokeText(char, currentX, y);
+      const charWidth = ctx.measureText(char).width;
+      currentX += charWidth + letterSpacing;
     });
   };
 
@@ -336,6 +469,7 @@ export function ImageEditor({
       ctx.fillRect(boundingX + boundingWidth/2 - handleSize/2, boundingY + boundingHeight - handleSize/2, handleSize, handleSize);
       ctx.fillRect(boundingX - handleSize/2, boundingY + boundingHeight/2 - handleSize/2, handleSize, handleSize);
       ctx.fillRect(boundingX + boundingWidth - handleSize/2, boundingY + boundingHeight/2 - handleSize/2, handleSize, handleSize);
+      
       // Rotation handle
       ctx.fillStyle = '#ef4444';
       ctx.beginPath();
@@ -899,16 +1033,20 @@ export function ImageEditor({
           </div>
           
           <div className="absolute top-2 left-2 bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded space-y-1">
-            <div>• Arrow keys: nudge selected text (Shift for 10px)</div>
-            <div>• Ctrl+Click: multi-select layers</div>
+            <div>🎯 <strong>Pro Tips:</strong></div>
+            <div>• ⌨️ Arrow keys: nudge text (Shift for 10px)</div>
+            <div>• 🖱️ Ctrl+Click: multi-select layers</div>
             {selectedLayers.length > 1 && (
               <div className="text-green-300">
-                • {selectedLayers.length} layers selected - group transforms active
+                • ✨ {selectedLayers.length} layers selected - group mode active
               </div>
             )}
-            <div>• Drag handles: resize • Red handle: rotate</div>
-            <div>• Double-click: center layer</div>
-            <div>• Ctrl+D: duplicate layer</div>
+            <div>• 🔄 Drag handles: resize • 🔴 Red handle: rotate</div>
+            <div>• 🎯 Double-click: snap to center</div>
+            <div>• 📋 Ctrl+D: duplicate layer</div>
+            <div>• 🔒 Lock layers to prevent edits</div>
+            <div>• 🎨 Use gradients, strokes & shadows for pro effects</div>
+            <div>• 📐 Smart spacing hints for precise alignment</div>
           </div>
           
           <input

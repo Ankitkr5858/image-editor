@@ -28,6 +28,24 @@ interface TextLayer {
     offsetX: number;
     offsetY: number;
   };
+  curved?: boolean;
+  curveRadius?: number;
+  stroke?: {
+    enabled: boolean;
+    color: string;
+    width: number;
+  };
+  gradient?: {
+    enabled: boolean;
+    type: 'linear' | 'radial';
+    colors: string[];
+    angle: number;
+  };
+  animation?: {
+    enabled: boolean;
+    type: 'fade' | 'slide' | 'bounce' | 'pulse';
+    duration: number;
+  };
 }
 
 interface EditorState {
@@ -94,6 +112,22 @@ export function useImageEditor() {
                 blur: 4,
                 offsetX: 2,
                 offsetY: 2
+              },
+              stroke: layer.stroke || {
+                enabled: false,
+                color: '#000000',
+                width: 2
+              },
+              gradient: layer.gradient || {
+                enabled: false,
+                type: 'linear',
+                colors: ['#000000', '#ffffff'],
+                angle: 0
+              },
+              animation: layer.animation || {
+                enabled: false,
+                type: 'fade',
+                duration: 1000
               }
             }));
             setTextLayers(layersWithDefaults);
@@ -122,6 +156,22 @@ export function useImageEditor() {
               blur: 4,
               offsetX: 2,
               offsetY: 2
+            },
+            stroke: layer.stroke || {
+              enabled: false,
+              color: '#000000',
+              width: 2
+            },
+            gradient: layer.gradient || {
+              enabled: false,
+              type: 'linear',
+              colors: ['#000000', '#ffffff'],
+              angle: 0
+            },
+            animation: layer.animation || {
+              enabled: false,
+              type: 'fade',
+              duration: 1000
             }
           }));
           setTextLayers(layersWithDefaults);
@@ -225,6 +275,24 @@ export function useImageEditor() {
         blur: 4,
         offsetX: 2,
         offsetY: 2
+      },
+      curved: false,
+      curveRadius: 100,
+      stroke: {
+        enabled: false,
+        color: '#000000',
+        width: 2
+      },
+      gradient: {
+        enabled: false,
+        type: 'linear',
+        colors: ['#000000', '#ffffff'],
+        angle: 0
+      },
+      animation: {
+        enabled: false,
+        type: 'fade',
+        duration: 1000
       }
     };
 
@@ -419,6 +487,81 @@ export function useImageEditor() {
     }
   }, []);
 
+  // Helper functions for letter spacing in export
+  const drawTextWithLetterSpacing = (
+    ctx: CanvasRenderingContext2D, 
+    text: string, 
+    x: number, 
+    y: number, 
+    letterSpacing: number,
+    textAlign: 'left' | 'center' | 'right'
+  ) => {
+    if (letterSpacing === 0) {
+      ctx.fillText(text, x, y);
+      return;
+    }
+
+    const chars = text.split('');
+    let currentX = x;
+    
+    // Calculate total width for alignment
+    if (textAlign === 'center' || textAlign === 'right') {
+      const totalWidth = chars.reduce((width, char, index) => {
+        const charWidth = ctx.measureText(char).width;
+        return width + charWidth + (index < chars.length - 1 ? letterSpacing : 0);
+      }, 0);
+      
+      if (textAlign === 'center') {
+        currentX = x - totalWidth / 2;
+      } else if (textAlign === 'right') {
+        currentX = x - totalWidth;
+      }
+    }
+    
+    chars.forEach((char, index) => {
+      ctx.fillText(char, currentX, y);
+      const charWidth = ctx.measureText(char).width;
+      currentX += charWidth + letterSpacing;
+    });
+  };
+
+  const drawStrokeWithLetterSpacing = (
+    ctx: CanvasRenderingContext2D, 
+    text: string, 
+    x: number, 
+    y: number, 
+    letterSpacing: number,
+    textAlign: 'left' | 'center' | 'right'
+  ) => {
+    if (letterSpacing === 0) {
+      ctx.strokeText(text, x, y);
+      return;
+    }
+
+    const chars = text.split('');
+    let currentX = x;
+    
+    // Calculate total width for alignment
+    if (textAlign === 'center' || textAlign === 'right') {
+      const totalWidth = chars.reduce((width, char, index) => {
+        const charWidth = ctx.measureText(char).width;
+        return width + charWidth + (index < chars.length - 1 ? letterSpacing : 0);
+      }, 0);
+      
+      if (textAlign === 'center') {
+        currentX = x - totalWidth / 2;
+      } else if (textAlign === 'right') {
+        currentX = x - totalWidth;
+      }
+    }
+    
+    chars.forEach((char, index) => {
+      ctx.strokeText(char, currentX, y);
+      const charWidth = ctx.measureText(char).width;
+      currentX += charWidth + letterSpacing;
+    });
+  };
+
   const exportImage = useCallback(() => {
     if (!backgroundImage) {
       toast.error('No image to export');
@@ -440,8 +583,40 @@ export function useImageEditor() {
       textLayers.forEach(layer => {
         ctx.save();
         ctx.globalAlpha = layer.opacity;
+        
+        // Apply text shadow if enabled
+        if (layer.textShadow && layer.textShadow.enabled) {
+          ctx.shadowColor = layer.textShadow.color;
+          ctx.shadowBlur = layer.textShadow.blur;
+          ctx.shadowOffsetX = layer.textShadow.offsetX;
+          ctx.shadowOffsetY = layer.textShadow.offsetY;
+        }
+        
         ctx.font = `${layer.fontWeight} ${layer.fontSize}px ${layer.fontFamily}`;
-        ctx.fillStyle = layer.color;
+        
+        // Apply gradient if enabled
+        if (layer.gradient && layer.gradient.enabled) {
+          const gradient = layer.gradient.type === 'linear' 
+            ? (() => {
+                const angle = (layer.gradient.angle * Math.PI) / 180;
+                const distance = layer.fontSize * 2;
+                const x1 = layer.x - Math.cos(angle) * distance;
+                const y1 = layer.y - Math.sin(angle) * distance;
+                const x2 = layer.x + Math.cos(angle) * distance;
+                const y2 = layer.y + Math.sin(angle) * distance;
+                return ctx.createLinearGradient(x1, y1, x2, y2);
+              })()
+            : ctx.createRadialGradient(layer.x, layer.y, 0, layer.x, layer.y, layer.fontSize);
+          
+          layer.gradient.colors.forEach((color, index) => {
+            gradient.addColorStop(index / (layer.gradient!.colors.length - 1), color);
+          });
+          
+          ctx.fillStyle = gradient;
+        } else {
+          ctx.fillStyle = layer.color;
+        }
+        
         ctx.textAlign = layer.textAlign;
         
         // Apply rotation
@@ -455,7 +630,17 @@ export function useImageEditor() {
         const lineHeight = layer.fontSize * 1.2;
         
         lines.forEach((line, index) => {
-          ctx.fillText(line, layer.x, layer.y + (index * lineHeight));
+          const yPos = layer.y + (index * lineHeight);
+          
+          // Apply stroke if enabled
+          if (layer.stroke && layer.stroke.enabled) {
+            ctx.strokeStyle = layer.stroke.color;
+            ctx.lineWidth = layer.stroke.width;
+            ctx.strokeText(line, layer.x, yPos);
+          }
+          
+          // Draw fill text
+          ctx.fillText(line, layer.x, yPos);
         });
 
         ctx.restore();
